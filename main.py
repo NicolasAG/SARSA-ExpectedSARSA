@@ -88,8 +88,8 @@ def choose_action(s, epsilon):
 
     # Change default proba of best action to be 1-epsilon
     PI[s, best_a] = 1. - epsilon
-    print "best action:", best_a
-    assert np.sum(PI[s, :]) == 1.
+    # print "best action:", best_a
+    assert np.isclose(np.sum(PI[s, :]), 1.)
 
     # sample from ACTIONS with proba distribution PI[s, :]
     return np.random.choice(ACTIONS, p=PI[s, :])
@@ -108,8 +108,8 @@ def move(s, a, beta):
     if np.random.choice(2, p=[beta, 1-beta]) == 1:
         if a in [0, 3, 6] and V > 0: V -= 1
         elif a in [2, 5, 8] and V < 3: V += 1
-    else:
-        print "velocity not updated!"
+    # else:
+    #     print "velocity not updated!"
 
     r_border = range(6, 49, 7)  # states on the right border
     l_border = range(0, 49, 7)  # states on the left border
@@ -195,43 +195,74 @@ def main():
     args = parser.parse_args()
     print args
 
-    n_steps = []  # number of steps for each episode
-    rewards = []  # total reward for each episode
+    K = 1000
+    if args.n_episodes == 10000:
+        K = 10
 
-    start = dt.now()
-    ep = 0
-    while ep < args.n_episodes:
-        print "\nEpisode", ep+1, "/", args.n_episodes, "..."
-        reset()  # reset grid world and velocities before the start of each episode.
-        steps = 0  # keep track of the number of steps to finish an episode
-        reward = 0  # keep track of the total reward for that episode
-        s = START
-        a = choose_action(s, args.epsilon)
-        while s not in GOALS:
-            print WORLD
-            print "state:", s, "V:", V, "action:", a
-            s_next, r = move(s, a, args.beta)
-            steps += 1
-            reward += r
-            print "next state:", s_next, "reward:", r
-            if args.method == "SARSA":  # need to pick next action BEFORE the update!
-                a_next = choose_action(s_next, args.epsilon)
-                Q[s, a] = Q[s, a] + args.alpha * (r + args.gamma * Q[s_next, a_next] - Q[s, a])
-            else:  # no need to pick the next action, we take the expectation of Q!
-                Q[s, a] = Q[s, a] + args.alpha * (r + args.gamma * np.sum(PI[s, :]*Q[s, :]) - Q[s, a])
-                a_next = choose_action(s_next, args.epsilon)
-            s = s_next
-            a = a_next
-        ep += 1
-        n_steps.append(steps)
-        rewards.append(reward)
-    print WORLD
+    average_steps = []  # average steps over all episodes
+    average_reward = []  # average reward over all episodes
+    average_running_time = []  # running time for performing all episodes
+    for k in range(K):  # perform the experiment K times!
 
-    print "took:", (dt.now() - start).total_seconds(), "seconds."
-    print "number of steps for each episode:", n_steps
-    print "average number of steps:", np.average(n_steps)
-    print "reward of each episode:", rewards
-    print "average return:", np.average(rewards)
+        global Q, PI  # restart learning!!
+        PI = np.zeros((len(STATES), len(ACTIONS)))  # policy: <state, action> -> <float>
+        Q = np.zeros((len(STATES), len(ACTIONS)))  # <state, action> -> <float>
+
+        n_steps = []  # number of steps for each episode
+        rewards = []  # total reward for each episode
+
+        start = dt.now()
+        ep = 0
+        while ep < args.n_episodes:
+            print "\nEpisode", ep+1, "/", args.n_episodes, "..."
+            reset()  # reset grid world and velocities before the start of each episode.
+            steps = 0  # keep track of the number of steps to finish an episode
+            reward = 0  # keep track of the total reward for that episode
+            s = START
+            a = choose_action(s, args.epsilon)
+            while s not in GOALS:
+                # print WORLD
+                # print "state:", s, "V:", V, "action:", a
+                s_next, r = move(s, a, args.beta)
+                steps += 1
+                reward += r
+                # print "next state:", s_next, "reward:", r
+                if args.method == "SARSA":  # need to pick next action BEFORE the update!
+                    a_next = choose_action(s_next, args.epsilon)
+                    Q[s, a] = Q[s, a] + args.alpha * (r + args.gamma * Q[s_next, a_next] - Q[s, a])
+                else:  # no need to pick the next action, we take the expectation of Q!
+                    # print "PI[s,:]", PI[s,:]
+                    # print "Q[s,:]", Q[s,:]
+                    # print "PI*Q=", PI[s,:]*Q[s,:]
+                    # print "sum(PI*Q)=", np.sum(PI[s,:]*Q[s,:])
+                    Q[s, a] = Q[s, a] + args.alpha * (r + args.gamma * np.sum(PI[s, :]*Q[s, :]) - Q[s, a])
+                    a_next = choose_action(s_next, args.epsilon)
+                s = s_next
+                a = a_next
+            ep += 1
+            n_steps.append(steps)
+            rewards.append(reward)
+        print WORLD
+        run_time = (dt.now() - start).total_seconds()
+        average_running_time.append(run_time)
+        # print "took:", run_time, "seconds."
+
+        # print "number of steps for each episode:", n_steps
+        avg_n_steps = np.average(n_steps)  # average number of steps for each episode.
+        average_steps.append(avg_n_steps)
+        # print "average number of steps:", avg_n_steps
+
+        # print "reward of each episode:", rewards
+        avg_reward = np.average(rewards)  # average reward of each episode.
+        average_reward.append(avg_reward)
+        # print "average return:", avg_reward
+
+    # print "time:", average_running_time
+    print "time avg:", np.average(average_running_time)  # average over K experiments
+    # print "steps:", average_steps
+    print "steps avg:", np.average(average_steps)  # average over K experiments
+    # print "rewards:", average_reward
+    print "rewards avg:", np.average(average_reward)  # average over K experiments
 
 
 if __name__ == '__main__':
